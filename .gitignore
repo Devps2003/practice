@@ -1,0 +1,13 @@
+# Secrets
+.env
+.streamlit/secrets.toml
+
+# Profile & cache (personal data)
+learning_profile.json
+.cache/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
