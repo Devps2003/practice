@@ -102,6 +102,34 @@ Money Flow: Student/Parent → Edviron PG → Payment Gateway → Bank → Commi
 11. Trustee-backend calculates 4-tier commission
 12. Payment-service sends ERP webhook (via setTimeout, no retry)
 13. Reconciliation crons clean up PENDING payments every 30 min
+
+## FUTURE ROADMAP & STRATEGIC PLANS
+
+### Payment Infrastructure Platform
+- Edviron plans to evolve from a payment aggregator into a full payment infrastructure provider
+- White-label payment gateway capabilities for educational institutions
+- API-first design for third-party integrations
+- Multi-tenant payment processing with custom routing rules
+
+### Insurance on Fees
+- Plans to sell insurance products on school fee payments
+- Fee protection insurance — insuring parents against inability to pay fees
+- School revenue insurance — guaranteeing fee collection for schools
+- Underwriting models based on payment history data Edviron already collects
+- Distribution through existing school relationships (built-in channel)
+- Partnership with insurance providers (embedded insurance model)
+
+### Data Monetization & Embedded Finance
+- Credit scoring for schools based on payment collection patterns
+- BNPL (Buy Now Pay Later) for fee payments — installment plans
+- Working capital lending to schools based on receivables data
+- Risk assessment using transaction data moat
+- Analytics dashboards for schools (payment trends, parent behavior)
+
+### Platform Evolution
+- From payments → financial services ecosystem for education
+- Network effects: more schools → more data → better products → more schools
+- Building data moat that becomes increasingly defensible
 """
 
 CHALLENGE_CATEGORIES = {
@@ -363,6 +391,110 @@ CHALLENGE_CATEGORIES = {
             "Database internals (WAL, MVCC, isolation levels)",
             "Garbage collection strategies",
             "Compiler and interpreter basics",
+        ]
+    },
+    "team_leadership": {
+        "emoji": "👑",
+        "name": "Team Leadership",
+        "topics": [
+            "You're hiring your first 3 engineers — design the process",
+            "An engineer is underperforming — how to handle the conversation",
+            "Two senior engineers disagree on architecture — resolve it",
+            "You need to fire someone — what's the process and communication",
+            "Team morale is low after a failed launch — rebuild confidence",
+            "A critical engineer wants to quit — retention conversation",
+            "Setting up engineering career ladders from scratch",
+            "Running your first sprint retrospective",
+            "Delegating a critical project to a junior engineer",
+            "Building culture document for a 5-person team",
+            "Your CEO disagrees with your technical direction — persuade them",
+            "Designing a blameless postmortem process",
+            "Your team shipped a bug that lost money — crisis communication",
+            "Mentoring an engineer from junior to senior in 1 year",
+            "Setting up 1-on-1 structure for a growing team",
+            "Planning a technical offsite for alignment",
+            "Managing up — keeping your CEO informed without micromanagement",
+            "When to build vs buy — making the case to leadership",
+            "Your top engineer wants to become a manager — guide them",
+            "Handling burnout in a fast-paced startup",
+        ]
+    },
+    "business_strategy": {
+        "emoji": "💼",
+        "name": "Business & Strategy",
+        "topics": [
+            "Your company's burn rate is too high — where to cut costs technically",
+            "A competitor launched a similar feature — respond strategically",
+            "Your largest customer wants a custom feature — build or refuse?",
+            "Pricing your SaaS product — unit economics analysis",
+            "Board meeting prep — presenting engineering metrics to investors",
+            "Evaluating whether to pivot or persevere",
+            "Building a financial model for your startup's next year",
+            "Fundraising pitch — connecting tech decisions to growth metrics",
+            "A strategic partnership opportunity — evaluate the deal",
+            "Your CAC is higher than LTV — diagnose and fix",
+            "Entering a new market segment — go-to-market analysis",
+            "Your churn rate is rising — find root cause and fix it",
+            "Building a data moat for your platform",
+            "Vendor lock-in assessment — should you switch cloud providers?",
+            "Setting OKRs for the engineering team tied to business outcomes",
+            "Analyzing competitor's funding announcement — what it means for you",
+            "Revenue per engineer — how to optimize engineering efficiency",
+            "Market sizing (TAM/SAM/SOM) for a new product line",
+            "Negotiating a gateway partnership deal",
+            "Compliance deadline approaching — prioritize vs feature work",
+        ]
+    },
+    "product_thinking": {
+        "emoji": "🎨",
+        "name": "Product Thinking",
+        "topics": [
+            "A user complains about payment UX — redesign the flow",
+            "Feature prioritization — 5 features, limited resources, rank them",
+            "Designing an A/B test for a new checkout flow",
+            "Your activation rate is 30% — diagnose and improve",
+            "Building a product metrics dashboard from scratch",
+            "User research plan — interviewing 10 school admins",
+            "Product-market fit assessment for Edviron",
+            "Designing a feature flag system for progressive rollout",
+            "Retention analysis — why users drop off after month 3",
+            "Mobile vs desktop UX strategy for payment collection",
+            "Building a self-serve onboarding flow for schools",
+            "Designing a notification system users actually engage with",
+            "Competitive feature analysis — what to copy, what to skip",
+            "Writing a PRD (Product Requirements Document)",
+            "Launching a new payment method — GTM plan",
+            "Analytics setup — what events to track for a payment app",
+            "North Star metric selection for a fintech platform",
+            "Sunset a feature — communication and migration plan",
+            "Cohort analysis — comparing monthly school signups",
+            "Building a feedback loop from support tickets to product",
+        ]
+    },
+    "communication_skills": {
+        "emoji": "📝",
+        "name": "Communication",
+        "topics": [
+            "Write an RFC for migrating from monolith to microservices",
+            "Explain a production incident to non-technical CEO",
+            "Write a weekly engineering status update",
+            "Present a technical proposal to the board",
+            "Write an incident postmortem that drives action",
+            "Communicate a delayed release to stakeholders",
+            "Write a job description for a senior backend engineer",
+            "Give code review feedback on a PR with major issues",
+            "Write an investor update highlighting engineering progress",
+            "Present technical debt to leadership — why it matters",
+            "Explain why you chose Postgres over MongoDB to the CEO",
+            "Write a runbook for handling payment failures",
+            "Communicate a security vulnerability to customers",
+            "Write a technical blog post about your system architecture",
+            "Design a documentation strategy for a growing codebase",
+            "Send an async decision document for an architecture change",
+            "Write rejection feedback after a technical interview",
+            "Present quarterly engineering OKR results",
+            "Write a migration guide for a breaking API change",
+            "Communicate a pricing change to existing customers",
         ]
     },
 }

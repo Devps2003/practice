@@ -15,17 +15,75 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# ══════════════════════════════════════════════════════════════════════
+# ── AUTH — Password gate before anything else loads ──────────────────
+# ══════════════════════════════════════════════════════════════════════
+import os
+import hashlib
+from pathlib import Path
+
+def _load_env_early():
+    """Load .env before auth check so password can come from .env too."""
+    env_path = Path(__file__).parent / ".env"
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, val = line.split("=", 1)
+                os.environ.setdefault(key.strip(), val.strip())
+
+_load_env_early()
+
+def _get_password() -> str:
+    """Get password from secrets > env > default."""
+    try:
+        pw = st.secrets.get("APP_PASSWORD", "")
+        if pw:
+            return str(pw)
+    except Exception:
+        pass
+    return os.environ.get("APP_PASSWORD", "")
+
+_APP_PASSWORD = _get_password()
+
+def _check_auth():
+    """Show login form and block access until correct password."""
+    if not _APP_PASSWORD:
+        return True  # No password set — open access
+
+    if st.session_state.get("authenticated"):
+        return True
+
+    st.markdown("# ⚡ Founding Engineer HQ")
+    st.markdown("---")
+    st.markdown("### 🔒 Login Required")
+
+    with st.form("login_form"):
+        password = st.text_input("Password", type="password", placeholder="Enter password...")
+        submitted = st.form_submit_button("Login", type="primary", use_container_width=True)
+
+        if submitted:
+            if password == _APP_PASSWORD:
+                st.session_state["authenticated"] = True
+                st.rerun()
+            else:
+                st.error("❌ Wrong password. Try again.")
+
+    st.caption("Access restricted. Contact the owner for credentials.")
+    return False
+
+if not _check_auth():
+    st.stop()
+
 # ── Now safe to do all other imports ────────────────────────────────
 from groq import Groq
 import google.generativeai as genai
 import random
 import json
 import time
-import os
 import re
 import tempfile
 from datetime import datetime, date
-from pathlib import Path
 from typing import Optional
 
 # ── Try importing optional packages gracefully ───────────────────────
@@ -53,20 +111,33 @@ from context import (
     WELCOME_MESSAGE,
 )
 
+try:
+    from ai_curriculum import (
+        AI_SECTIONS,
+        FOUNDER_SECTIONS,
+        ALL_SECTIONS,
+        get_all_topics,
+        get_all_topic_ids,
+        get_available_topics,
+        get_next_recommended,
+        get_section_progress,
+        get_topic_by_id,
+        build_lesson_prompt,
+        AI_TOTAL_TOPICS,
+        AI_TOTAL_SECTIONS,
+        FOUNDER_TOTAL_TOPICS,
+        FOUNDER_TOTAL_SECTIONS,
+        TOTAL_TOPICS,
+        TOTAL_SECTIONS,
+    )
+    CURRICULUM_AVAILABLE = True
+except ImportError:
+    CURRICULUM_AVAILABLE = False
+
 # ══════════════════════════════════════════════════════════════════════
 # ── CONFIG: Load API keys (Streamlit Secrets → .env → env vars) ──────
 # ══════════════════════════════════════════════════════════════════════
-def _load_env():
-    """Load .env file for local development (silently skip if missing)."""
-    env_path = Path(__file__).parent / ".env"
-    if env_path.exists():
-        for line in env_path.read_text().splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, val = line.split("=", 1)
-                os.environ.setdefault(key.strip(), val.strip())
-
-_load_env()
+# .env already loaded in _load_env_early() above auth gate
 
 def get_config(key: str, default: str = "") -> str:
     """Get config value: Streamlit Secrets > env vars > default.
@@ -134,6 +205,9 @@ _PROFILE_DEFAULTS = {
     "level_up_suggestions": 0,
     "created_at": date.today().isoformat(),
     "briefs_read": 0,
+    "ai_topics_studied": [],       # list of topic IDs completed
+    "ai_topics_recent": [],        # last 5 topics studied (for variety)
+    "ai_lessons_read": 0,
 }
 
 def _load_profile_from_disk() -> dict:
@@ -178,6 +252,8 @@ _defaults = {
     "fetched_articles": None,
     "daily_brief_cache": {},   # {date_str: brief_text}
     "brief_loading": False,
+    "current_lesson_ai": None,      # current AI Academy lesson
+    "current_lesson_founder": None,  # current Founder Academy lesson
 }
 for _k, _v in _defaults.items():
     if _k not in st.session_state:
@@ -295,9 +371,9 @@ def get_response(user_msg: str, max_retries: int = 3) -> str:
     return "⚠️ Max retries exceeded. Please try again."
 
 
-def get_brief_llm(prompt: str, max_retries: int = 3) -> str:
-    """Separate stateless LLM call for brief/assessment — doesn't pollute coach history."""
-    system = "You are a content curator for a founding engineer. Be concise, high-signal, no fluff."
+def get_brief_llm(prompt: str, max_retries: int = 3, system_override: str = None, max_tokens: int = 4000) -> str:
+    """Separate stateless LLM call for brief/assessment/lessons — doesn't pollute coach history."""
+    system = system_override or "You are a content curator for a founding engineer. Be concise, high-signal, no fluff."
     for attempt in range(max_retries):
         try:
             if GROQ_KEY:
@@ -310,7 +386,7 @@ def get_brief_llm(prompt: str, max_retries: int = 3) -> str:
                         {"role": "user", "content": prompt},
                     ],
                     temperature=0.5,
-                    max_tokens=4000,
+                    max_tokens=max_tokens,
                 )
                 return resp.choices[0].message.content
             elif GEMINI_KEY:
@@ -607,6 +683,7 @@ with st.sidebar:
         st.caption(f"API: {'✅ Set' if st.session_state.api_configured else '❌ Missing'}")
         st.caption(f"Audio: {'✅' if AUDIO_AVAILABLE else '❌ (pip install audio-recorder-streamlit)'}")
         st.caption(f"Feeds: {'✅' if FEEDS_AVAILABLE else '❌ (pip install feedparser)'}")
+        st.caption(f"Academy: {'✅' if CURRICULUM_AVAILABLE else '❌'} ({TOTAL_TOPICS} topics)" if CURRICULUM_AVAILABLE else "Academy: ❌")
 
     st.markdown("---")
     if st.button("🗑️ Reset Chat", use_container_width=True, key="sb_reset_chat"):
@@ -662,8 +739,8 @@ Get a free Groq key: [console.groq.com/keys](https://console.groq.com/keys)
 # ══════════════════════════════════════════════════════════════════════
 # ── TABS ─────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════
-tab_coach, tab_brief, tab_browse, tab_stats = st.tabs([
-    "🎯 Coach", "📰 Daily Brief", "🔍 Articles", "📊 Progress"
+tab_coach, tab_ai, tab_founder, tab_brief, tab_browse, tab_stats = st.tabs([
+    "🎯 Coach", "🧠 AI Academy", "🚀 Founder Academy", "📰 Daily Brief", "🔍 Articles", "📊 Progress"
 ])
 
 
@@ -796,7 +873,238 @@ with tab_coach:
 
 
 # ══════════════════════════════════════════════════════════════════════
-# ── TAB 2: DAILY BRIEF ───────────────────────────────────────────────
+# ── TAB 2: AI ACADEMY ────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════
+_LESSON_SYSTEM = (
+    "You are a world-class principal engineer, CTO, and technical writer with deep expertise across: "
+    "AI/ML, system design, leadership, business strategy, product thinking, communication, and fintech. "
+    "You write exhaustive, mastery-level lessons that cover EVERYTHING about a topic — "
+    "theory, math, code, industry context, real numbers, tradeoffs, frameworks, templates, and war stories. "
+    "Your lessons are 2000-3000+ words. You never hand-wave. You never say 'this is well-known'. "
+    "You explain every concept from first principles with real examples and real numbers. "
+    "For leadership topics: include conversation scripts, templates, and real case studies from tech CTOs. "
+    "For business topics: include financial math, Indian startup examples, and VC perspectives. "
+    "For product topics: include frameworks, metrics, and user psychology. "
+    "For communication topics: include full document examples, before/after comparisons, and templates. "
+    "For Edviron topics: reference the actual codebase architecture, payment flow, and competitive landscape. "
+    "You reference actual companies, leaders, products, and research. "
+    "Your writing style is like a founding CTO's personal playbook — dense, opinionated, practical, actionable."
+)
+
+# ── Reusable Academy renderer ─────────────────────────────────────
+def render_academy(sections_dict, title, subtitle, total_topics, total_sections, lesson_key, prefix):
+    """Render an academy tab — reusable for AI and Founder tracks."""
+    if not CURRICULUM_AVAILABLE:
+        st.warning("Curriculum module not found. Make sure `ai_curriculum.py` is present.")
+        return
+
+    st.markdown(f"## {title}")
+    st.caption(subtitle)
+
+    p = profile()
+    studied_set = set(p.get("ai_topics_studied", []))
+    track_topic_ids = get_all_topic_ids(sections_dict)
+    track_studied = studied_set & track_topic_ids
+    track_pct = (len(track_studied) / total_topics * 100) if total_topics else 0
+
+    st.progress(min(track_pct / 100, 1.0))
+    st.caption(f"**{len(track_studied)}/{total_topics} topics completed** ({track_pct:.0f}%)")
+    st.markdown("---")
+
+    # ── Lesson Display ──────────────────────────────────────────
+    if st.session_state.get(lesson_key):
+        lesson = st.session_state[lesson_key]
+        topic_info = lesson.get("topic", {})
+
+        st.markdown(f"### {topic_info.get('section_emoji', '📖')} {topic_info.get('title', 'Lesson')}")
+        st.caption(f"Section: {topic_info.get('section_name', '')} · Tags: {', '.join(topic_info.get('tags', []))}")
+        st.markdown("---")
+        st.markdown(lesson["content"])
+        st.markdown("---")
+
+        act1, act2, act3 = st.columns(3)
+        with act1:
+            if st.button("✅ Mark as Studied", type="primary", use_container_width=True, key=f"{prefix}_mark"):
+                tid = topic_info["id"]
+                p = profile()
+                if tid not in p.get("ai_topics_studied", []):
+                    p["ai_topics_studied"] = p.get("ai_topics_studied", []) + [tid]
+                    p["ai_topics_recent"] = (p.get("ai_topics_recent", []) + [tid])[-5:]
+                    p["ai_lessons_read"] = p.get("ai_lessons_read", 0) + 1
+                    save_profile(p)
+                st.session_state[lesson_key] = None
+                st.rerun()
+        with act2:
+            if st.button("🔄 Regenerate", use_container_width=True, key=f"{prefix}_regen"):
+                with st.spinner("Regenerating lesson..."):
+                    prompt = build_lesson_prompt(topic_info, studied_set)
+                    content = get_brief_llm(prompt, system_override=_LESSON_SYSTEM, max_tokens=8000)
+                st.session_state[lesson_key] = {"topic": topic_info, "content": content}
+                st.rerun()
+        with act3:
+            if st.button("← Back to Topics", use_container_width=True, key=f"{prefix}_back"):
+                st.session_state[lesson_key] = None
+                st.rerun()
+
+    else:
+        # ── Recommended Next ────────────────────────────────────
+        recommended = get_next_recommended(studied_set, p.get("ai_topics_recent", []), sections_dict)
+
+        if recommended:
+            st.markdown("### ⚡ Recommended Next")
+            st.caption("Smart picks — prereqs satisfied, critical topics prioritized.")
+
+            top_picks = recommended[:6]
+            for i in range(0, len(top_picks), 2):
+                cols = st.columns(2)
+                for j, col in enumerate(cols):
+                    idx = i + j
+                    if idx >= len(top_picks):
+                        break
+                    t = top_picks[idx]
+                    with col:
+                        is_critical = "critical" in t.get("tags", [])
+                        badge = " 🔥" if is_critical else ""
+                        prereq_names = []
+                        for pid in t["prereqs"]:
+                            pt = get_topic_by_id(pid)
+                            if pt:
+                                check = "✅" if pid in studied_set else "⬜"
+                                prereq_names.append(f"{check} {pt['title']}")
+
+                        with st.container(border=True):
+                            st.markdown(f"**{t['section_emoji']} {t['title']}{badge}**")
+                            st.caption(f"{t['section_name']} · {', '.join(t.get('tags', []))}")
+                            if prereq_names:
+                                with st.expander("Prerequisites", expanded=False):
+                                    for pn in prereq_names:
+                                        st.caption(pn)
+                            if st.button(
+                                "📖 Study This",
+                                key=f"{prefix}_study_{t['id']}",
+                                use_container_width=True,
+                                type="primary" if is_critical else "secondary",
+                            ):
+                                with st.spinner(f"Generating deep lesson on {t['title']}..."):
+                                    prompt = build_lesson_prompt(t, studied_set)
+                                    content = get_brief_llm(prompt, system_override=_LESSON_SYSTEM, max_tokens=8000)
+                                st.session_state[lesson_key] = {"topic": t, "content": content}
+                                st.rerun()
+        else:
+            st.success("🎉 You've completed all available topics in this track!")
+
+        st.markdown("---")
+
+        # ── Section Progress ────────────────────────────────────
+        st.markdown("### 📊 Curriculum Map")
+        sec_progress = get_section_progress(studied_set, sections_dict)
+
+        for sp in sec_progress:
+            with st.expander(
+                f"{sp['emoji']} {sp['name']} — {sp['done']}/{sp['total']} ({sp['pct']:.0f}%)",
+                expanded=False,
+            ):
+                st.progress(min(sp["pct"] / 100, 1.0))
+                st.caption(f"🎯 Goal: *{sp['goal']}*")
+
+                sec = sections_dict[sp["key"]]
+                for t in sec["topics"]:
+                    is_done = t["id"] in studied_set
+                    prereqs_met = all(pid in studied_set for pid in t["prereqs"])
+                    is_critical = "critical" in t.get("tags", [])
+
+                    if is_done:
+                        icon = "✅"
+                    elif prereqs_met:
+                        icon = "🟢"
+                    else:
+                        icon = "🔒"
+
+                    badge = " 🔥" if is_critical else ""
+                    tc1, tc2 = st.columns([5, 2])
+                    with tc1:
+                        st.markdown(f"{icon} {t['title']}{badge}")
+                    with tc2:
+                        if is_done:
+                            if st.button("↩️ Unmark", key=f"{prefix}_unmark_{t['id']}", use_container_width=True):
+                                p = profile()
+                                p["ai_topics_studied"] = [x for x in p.get("ai_topics_studied", []) if x != t["id"]]
+                                save_profile(p)
+                                st.rerun()
+                        elif prereqs_met:
+                            if st.button("📖 Study", key=f"{prefix}_sec_{t['id']}", use_container_width=True):
+                                full_t = {**t, "section_key": sp["key"], "section_name": sp["name"], "section_emoji": sp["emoji"]}
+                                with st.spinner("Generating lesson..."):
+                                    prompt = build_lesson_prompt(full_t, studied_set)
+                                    content = get_brief_llm(prompt, system_override=_LESSON_SYSTEM, max_tokens=8000)
+                                st.session_state[lesson_key] = {"topic": full_t, "content": content}
+                                st.rerun()
+                        else:
+                            missing = [get_topic_by_id(pid) for pid in t["prereqs"] if pid not in studied_set]
+                            missing_names = [m["title"] for m in missing if m]
+                            st.caption(f"Needs: {', '.join(missing_names[:2])}")
+
+        st.markdown("---")
+
+        # ── Quick mark as already known ─────────────────────────
+        with st.expander("⚡ Already know some topics? Mark as studied"):
+            st.caption("Check off topics you already know to unlock advanced ones.")
+            quick_section = st.selectbox(
+                "Section",
+                options=[s["key"] for s in sec_progress],
+                format_func=lambda k: f"{sections_dict[k]['emoji']} {sections_dict[k]['name']}",
+                key=f"{prefix}_quick_sec",
+            )
+            mark_cols = st.columns(2)
+            section_topics = [t for t in get_all_topics(sections_dict) if t["section_key"] == quick_section]
+
+            for i, t in enumerate(section_topics):
+                is_done = t["id"] in studied_set
+                with mark_cols[i % 2]:
+                    if st.checkbox(t["title"], value=is_done, key=f"{prefix}_q_{t['id']}"):
+                        if not is_done:
+                            p = profile()
+                            if t["id"] not in p.get("ai_topics_studied", []):
+                                p["ai_topics_studied"] = p.get("ai_topics_studied", []) + [t["id"]]
+                                save_profile(p)
+                    else:
+                        if is_done:
+                            p = profile()
+                            p["ai_topics_studied"] = [x for x in p.get("ai_topics_studied", []) if x != t["id"]]
+                            save_profile(p)
+
+    st.markdown("---")
+    st.caption(f"📚 Total lessons read: {p.get('ai_lessons_read', 0)} · Overall mastered: {len(studied_set)}/{TOTAL_TOPICS}")
+
+
+# ── TAB 2: AI ACADEMY ────────────────────────────────────────────────
+with tab_ai:
+    render_academy(
+        sections_dict=AI_SECTIONS if CURRICULUM_AVAILABLE else {},
+        title="🧠 AI / ML / LLM Academy",
+        subtitle=f"Master AI from foundations to production — {AI_TOTAL_TOPICS if CURRICULUM_AVAILABLE else 0} topics across {AI_TOTAL_SECTIONS if CURRICULUM_AVAILABLE else 0} sections. Theory → Internals → Industry → Production → Strategy.",
+        total_topics=AI_TOTAL_TOPICS if CURRICULUM_AVAILABLE else 0,
+        total_sections=AI_TOTAL_SECTIONS if CURRICULUM_AVAILABLE else 0,
+        lesson_key="current_lesson_ai",
+        prefix="ai",
+    )
+
+
+# ── TAB 3: FOUNDER ACADEMY ───────────────────────────────────────────
+with tab_founder:
+    render_academy(
+        sections_dict=FOUNDER_SECTIONS if CURRICULUM_AVAILABLE else {},
+        title="🚀 Founder Academy",
+        subtitle=f"Leadership · Business · Product · Communication · Edviron — {FOUNDER_TOTAL_TOPICS if CURRICULUM_AVAILABLE else 0} topics across {FOUNDER_TOTAL_SECTIONS if CURRICULUM_AVAILABLE else 0} sections. Become the founding engineer everyone relies on.",
+        total_topics=FOUNDER_TOTAL_TOPICS if CURRICULUM_AVAILABLE else 0,
+        total_sections=FOUNDER_TOTAL_SECTIONS if CURRICULUM_AVAILABLE else 0,
+        lesson_key="current_lesson_founder",
+        prefix="fdr",
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ── TAB 4: DAILY BRIEF ───────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════
 with tab_brief:
     st.markdown("## 📰 Your Daily Brief")
@@ -843,7 +1151,7 @@ with tab_brief:
 
 
 # ══════════════════════════════════════════════════════════════════════
-# ── TAB 3: BROWSE ARTICLES ───────────────────────────────────────────
+# ── TAB 5: BROWSE ARTICLES ───────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════
 with tab_browse:
     st.markdown("## 🔍 Browse Latest Articles")
@@ -893,7 +1201,7 @@ with tab_browse:
 
 
 # ══════════════════════════════════════════════════════════════════════
-# ── TAB 4: PROGRESS ──────────────────────────────────────────────────
+# ── TAB 6: PROGRESS ──────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════
 with tab_stats:
     p = profile()

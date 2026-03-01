@@ -41,14 +41,16 @@ git push -u origin main
    - **Main file path**: `app.py`
    - **App URL**: `founding-engineer-hq` (or your choice)
 5. Click **"Advanced settings"** → **"Secrets"**
-6. Paste this (replace `your_groq_api_key_here` with your actual key):
+6. Paste this (replace placeholders with your actual values):
 
 ```toml
 GROQ_API_KEY = "your_groq_api_key_here"
 LLM_PROVIDER = "groq"
+APP_PASSWORD = "your_login_password_here"
 ```
 
 **Get your Groq API key:** [console.groq.com/keys](https://console.groq.com/keys)
+**APP_PASSWORD** — this locks the app so only you can access it.
 
 7. Click **"Deploy"** → Wait ~2 minutes
 
@@ -70,16 +72,19 @@ LLM_PROVIDER = "groq"
 ## 🔒 Security Checklist
 
 - ✅ `.env` is in `.gitignore` (won't be pushed)
+- ✅ `.streamlit/secrets.toml` is in `.gitignore` (won't be pushed)
 - ✅ `learning_profile.json` is in `.gitignore` (personal data)
-- ✅ API keys go in Streamlit Cloud **Secrets** (not in code)
+- ✅ API keys & password go in Streamlit Cloud **Secrets** (not in code)
+- ✅ `APP_PASSWORD` locks the app — only you can access it
 - ✅ Repository should be **PRIVATE** on GitHub
 
 ---
 
 ## 📝 Files Included in Deployment
 
-- ✅ `app.py` — Main app
-- ✅ `context.py` — Edviron context & prompts
+- ✅ `app.py` — Main app (coach + academy + daily brief + progress)
+- ✅ `context.py` — Edviron context, 14 challenge categories, prompts
+- ✅ `ai_curriculum.py` — 222 topics across 20 sections (AI + Leadership + Business + Product + Communication + Edviron)
 - ✅ `feeds.py` — RSS feed parser
 - ✅ `requirements.txt` — Dependencies
 - ✅ `.streamlit/config.toml` — Streamlit config
